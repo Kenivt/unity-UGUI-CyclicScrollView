@@ -1,61 +1,117 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
-public abstract partial class UICyclicScrollList<TCell, TData> : MonoBehaviour where TCell : MonoBehaviour
+namespace Knivt.Tools.UI
 {
-    /// <summary>
-    /// 刷新界面内对应index的Cell的显示信息
-    /// </summary>
-    public void ElementAtDataChange(int index)
+    public abstract partial class UICyclicScrollList<C, D> : MonoBehaviour where C : MonoBehaviour
     {
-        if (index < 0 || index >= Datas.Count())
-        {
-            throw new System.Exception("错误,索引越界...");
-        }
-        int firstIndex = viewCellBundles.First.Value.index;
-        int lastIndex = viewCellBundles.Last.Value.index;
-        int targetItemIndex = index / ItemCellCount;
-        int targetIndex = index % ItemCellCount;//计算出对应的索引
 
-        if (targetItemIndex >= firstIndex && targetItemIndex <= lastIndex)
+        /// <summary>
+        /// 刷新界面内对应index的Cell的显示信息
+        /// </summary>
+        public void ElementAtDataChange(int index)
         {
-            TCell cell = viewCellBundles.Single((a) => a.index == targetItemIndex).Cells[targetIndex];
-            ResetCellData(cell, Datas.ElementAt(index), index);
-        }
-    }
-    /// <summary>
-    /// 刷新界面内所有cell的显示信息
-    /// </summary>
-    public void RefrashViewRangeData()
-    {
-        if (viewCellBundles.Count() == 0)
-        {
-            return;
-        }
-        foreach (var bundle in viewCellBundles)
-        {
-            int startIndex = bundle.index * ItemCellCount;
-            int endIndex = startIndex + bundle.Cells.Length - 1;
-            for (int i = startIndex, j = 0; i <= endIndex && j < bundle.Cells.Length; i++, j++)
+            if (index < 0 || index >= Datas.Count)
             {
-                ResetCellData(bundle.Cells[j], Datas.ElementAt(i), i);
+                throw new System.Exception("错误,索引越界...");
+            }
+            if (viewCellBundles.Count == 0)
+            {
+                return;
+            }
+
+            int firstIndex = viewCellBundles.First.Value.index;
+            int lastIndex = viewCellBundles.Last.Value.index;
+            int targetItemIndex = index / _ItemCellCount;
+            int targetIndex = index % _ItemCellCount;//计算出对应的索引
+
+            if (targetItemIndex >= firstIndex && targetItemIndex <= lastIndex)
+            {
+                C cell = viewCellBundles.Single((a) => a.index == targetItemIndex).Cells[targetIndex];
+                ResetCellData(cell, Datas.ElementAt(index), index);
             }
         }
-    }
-    public void RecaculateContentSize()
-    {
-        int itemCount = ItemCount;
-        if (viewDirection == UICyclicScrollDirection.Vertical)
+        /// <summary>
+        /// 刷新界面内所有cell的显示信息
+        /// </summary>
+        public void RefrashViewRangeData()
         {
-            _contentRectTransform.anchorMin = VerticalContentAnchorMin;
-            _contentRectTransform.anchorMax = VerticalContentAnchorMax;
-            _contentRectTransform.sizeDelta = new Vector2(_contentRectTransform.sizeDelta.x, itemCount * ItemSize.y - CellSpace.y);
+            if (viewCellBundles.Count() == 0)
+            {
+                return;
+            }
+            LinkedListNode<ViewCellBundle<C>> curNode = viewCellBundles.First;
+            bool flag = false;
+            int count = 0;
+
+            foreach (var bundle in viewCellBundles)
+            {
+                if (flag == true)
+                {
+                    break;
+                }
+                count++;
+                int startIndex = bundle.index * _ItemCellCount;
+                int endIndex = startIndex + bundle.Cells.Length - 1;
+
+                //防止越界...
+                if (endIndex >= Datas.Count)
+                {
+                    flag = true;
+                    endIndex = Datas.Count - 1;
+                }
+                int i = startIndex, j = 0;
+                for (; i <= endIndex && j < bundle.Cells.Length; i++, j++)
+                {
+                    ResetCellData(bundle.Cells[j], Datas.ElementAt(i), i);
+                }
+                if (flag == true)
+                {
+                    while (j < bundle.Cells.Length)
+                    {
+                        try
+                        {
+                            bundle.Cells[j++].gameObject.SetActive(false);
+                        }
+                        catch (System.Exception)
+                        {
+                            throw;
+                        }
+                    }
+                }
+            }
+
+            int remainCount = viewCellBundles.Count() - count;
+            while (remainCount > 0)
+            {
+                remainCount--;
+                ReleaseViewBundle(viewCellBundles.Last.Value);
+                viewCellBundles.RemoveLast();
+            }
         }
-        else if (viewDirection == UICyclicScrollDirection.Horizontal)
+        /// <summary>
+        /// 刷新Content的尺寸,当删除元素或者增加元素的时候请调用它
+        /// </summary>
+        public void RecalculateContentSize(bool resetContentPos)
         {
-            _contentRectTransform.anchorMin = HorizontalContentAnchorMin;
-            _contentRectTransform.anchorMax = HorizontalContentAnchorMax;
-            _contentRectTransform.sizeDelta = new Vector2(itemCount * ItemSize.x - CellSpace.x, _contentRectTransform.sizeDelta.y);
+            int itemCount = ItemCount;
+            if (viewDirection == UICyclicScrollDirection.Vertical)
+            {
+                content.anchorMin = VerticalContentAnchorMin;
+                content.anchorMax = VerticalContentAnchorMax;
+                content.sizeDelta = new Vector2(content.sizeDelta.x, itemCount * ItemSize.y - _cellSpace.y);
+            }
+            else if (viewDirection == UICyclicScrollDirection.Horizontal)
+            {
+                content.anchorMin = HorizontalContentAnchorMin;
+                content.anchorMax = HorizontalContentAnchorMax;
+                content.sizeDelta = new Vector2(itemCount * ItemSize.x - _cellSpace.x, content.sizeDelta.y);
+            }
+            if (resetContentPos)
+            {
+                content.anchoredPosition = Vector2.zero;
+            }
         }
     }
 }
